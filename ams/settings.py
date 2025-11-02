@@ -71,6 +71,15 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ams.wsgi.application'
 
+SITE_URL = "http://192.168.0.37:8000"
+
+ALLOWED_HOSTS = ['192.168.0.37', '127.0.0.1', 'localhost']
+
+import os
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

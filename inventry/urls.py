@@ -13,6 +13,7 @@ router.register('batches', views.BatchViewSet)
 router.register('stores', views.StoreViewSet)
 router.register('stock-entries', views.StockEntryViewSet)
 router.register('stock-registers', views.StockRegisterViewSet)
+router.register('asset-tags', views.AssetTagViewSet, basename='asset-tags')
 
 
 certificates_router = routers.NestedDefaultRouter(

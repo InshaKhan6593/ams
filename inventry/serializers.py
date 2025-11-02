@@ -179,3 +179,94 @@ class StockEnteySerializer(serializers.ModelSerializer):
             'to_location', 'stock_register', 'transfer_note',
             'created_by', 'balance'
         ]
+
+class AssetTagListSerializer(serializers.ModelSerializer):
+    """Serializer for list view"""
+    item_name = serializers.CharField(source='batch.item.name', read_only=True)
+    item_code = serializers.CharField(source='batch.item.code', read_only=True)
+    batch_number = serializers.CharField(source='batch.batch_number', read_only=True)
+    store_name = serializers.CharField(source='current_store.name', read_only=True)
+    store_code = serializers.CharField(source='current_store.code', read_only=True)
+    location_name = serializers.CharField(source='current_location.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    qr_image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AssetTag
+        fields = [
+            'id', 'tag_number', 'qr_code_uuid', 'qr_image_url',
+            'item_name', 'item_code', 'batch_number',
+            'status', 'status_display',
+            'store_name', 'store_code', 'location_name',
+            'assigned_to', 'tagged_date', 'created_at'
+        ]
+    
+    def get_qr_image_url(self, obj):
+        if obj.qr_code_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.qr_code_image.url)
+            return obj.qr_code_image.url
+        return None
+
+
+
+class AssetTagDetailSerializer(serializers.ModelSerializer):
+    """Serializer for detailed view with all related data"""
+    full_details = serializers.SerializerMethodField()
+    qr_image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AssetTag
+        fields = [
+            'id', 'tag_number', 'qr_code_uuid', 'qr_image_url',
+            'batch', 'current_store', 'current_location',
+            'status', 'assigned_to', 'tagged_date',
+            'remarks', 'created_at', 'updated_at',
+            'full_details'
+        ]
+        read_only_fields = ['tag_number', 'qr_code_uuid', 'tagged_date', 'created_at', 'updated_at']
+    
+    def get_full_details(self, obj):
+        return obj.get_full_details()
+    
+    def get_qr_image_url(self, obj):
+        if obj.qr_code_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.qr_code_image.url)
+            return obj.qr_code_image.url
+        return None
+
+
+class AssetTagCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating assets"""
+    
+    class Meta:
+        model = AssetTag
+        fields = [
+            'batch', 'current_store', 'current_location',
+            'status', 'assigned_to', 'remarks', 'created_by'
+        ]
+    
+    def create(self, validated_data):
+        return AssetTag.objects.create(**validated_data)
+
+
+class AssetTagUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating asset status/location"""
+    
+    class Meta:
+        model = AssetTag
+        fields = [
+            'status', 'current_store', 'current_location',
+            'assigned_to', 'remarks'
+        ]
+
+class GenerateQRTagsSerializer(serializers.Serializer):
+    quantity = serializers.IntegerField(
+        min_value=1,
+        help_text='Number of QR tags to generate'
+    )
+
+

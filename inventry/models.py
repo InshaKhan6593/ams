@@ -6,6 +6,8 @@ from .helper_functions import *
 import qrcode
 from io import BytesIO
 from django.core.files import File
+from django.db import transaction
+from django.conf import settings
 
 class Department(models.Model):
     name = models.CharField(max_length=255)
@@ -420,29 +422,34 @@ class AssetTag(models.Model):
         return f"{dept}-{item}-{batch_seq}-{next_seq:04d}"
     
     def _generate_qr_code(self):
-        """Generate QR code image with UUID"""
+        """
+        Generate QR code that directly points to your endpoint for this asset
+        """
+        from django.conf import settings
+
+        # Build full URL to scan endpoint
+        qr_url = f"{settings.SITE_URL}/api/asset-tags/scan/{self.qr_code_uuid}/"
+
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_H,
             box_size=10,
             border=4,
         )
-        
-        qr.add_data(str(self.qr_code_uuid))
+        qr.add_data(qr_url)
         qr.make(fit=True)
-        
+    
         img = qr.make_image(fill_color="black", back_color="white")
-        
         buffer = BytesIO()
         img.save(buffer, format='PNG')
         file_name = f'qr_{self.tag_number}.png'
-        
+    
         self.qr_code_image.save(file_name, File(buffer), save=False)
         buffer.close()
-        
+    
         # Update without triggering save loop
         AssetTag.objects.filter(pk=self.pk).update(qr_code_image=self.qr_code_image)
-    
+
     def get_full_details(self):
         """Get complete details including from batch and inspection"""
         batch = self.batch
