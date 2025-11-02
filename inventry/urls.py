@@ -5,12 +5,24 @@ from rest_framework_nested import routers
 from . import views
 
 router = routers.DefaultRouter()
-router.register('inspections', views.InspectionViewSet)
-router.register('stockentries', views.StockEntryViewSet)
-router.register('storeinventry', views.StoreInventryViewSet)
+router.register('departments', views.DepartmentViewSet)
+router.register('item-categories', views.ItemCategoryViewSet)
+router.register('items', views.ItemViewSet)
+router.register('certificates', views.InspectionCertificateViewSet)
+router.register('batches', views.BatchViewSet)
+router.register('stores', views.StoreViewSet)
+router.register('stock-entries', views.StockEntryViewSet)
+router.register('stock-registers', views.StockRegisterViewSet)
 
-inspection_router = routers.NestedDefaultRouter(router, 'inspections', lookup='inspection')
-inspection_router.register('items', views.InspectionItemViewSet, basename='inspection-items')
 
+certificates_router = routers.NestedDefaultRouter(
+    router,
+    'certificates',
+    lookup='certificate'
+)
+certificates_router.register('items', views.InspectionItemViewSet, basename='certificate-items')
 
-urlpatterns = router.urls + inspection_router.urls
+stores_router = routers.NestedDefaultRouter(router, 'stores', lookup='store')
+stores_router.register('inventries', views.StoreInventryViewSet, basename='store-inventries')
+
+urlpatterns = router.urls + certificates_router.urls + stores_router.urls

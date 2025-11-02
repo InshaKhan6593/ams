@@ -1,62 +1,181 @@
 from rest_framework import serializers
-from .models import (
-    InspectionCertificate,
-    InspectionItem,
-    Department,
-    ItemCategory,
-    StockEntry,
-    StoreInventory,
-    Item
-)
+from django.urls import reverse
+from .models import *
 
 class DepartmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Department
-        fields = '__all__'
+        fields = ['id', 'name', 'code', 'is_main_university_store', 'created_at']
 
-class ItemSerilaizer(serializers.ModelSerializer):
+class ItemCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItemCategory
+        fields = ['id', 'name', 'code', 'description']
+
+class ItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = Item
-        fields = '__all__'
-
-class InspectionItemSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = InspectionItem
-        fields = '__all__'
-        read_only_fields = ['inspection']
+        fields = [
+            'source_type', 'name', 'code', 'department',
+            'category', 'specifications', 'source_type',
+            'university_master_item',
+        ]
     
-    def create(self, validated_data):
-        validated_data['inspection_id'] = self.context['inspection_id']
-        return super().create(validated_data)
-    
+    category = serializers.StringRelatedField()
 
 
 class InspectionCertificateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = InspectionCertificate
-        fields = '__all__'
 
-class ListInspectionCertificateSerializer(serializers.ModelSerializer):
+    item_count = serializers.SerializerMethodField(method_name='get_item_count')
+    items_link = serializers.SerializerMethodField(method_name='get_items_link')
     class Meta:
         model = InspectionCertificate
-        fields = '__all__'
+        fields = [
+            'id', 'certificate_number', 'issued_on', 'issued_to',
+            'contracter', 'indenter', 'consignee', 'department',
+            'date_of_delivery', 'delivery_status', 'stock_register',
+            'remarks', 'created_by', 'item_count', 'items_link'
+        ]
+
+    def get_item_count(self, obj):
+        return InspectionItem.objects.filter(inspection=obj).count()
     
-    items = InspectionItemSerializer(many=True)
+    def get_items_link(self, obj):
+        request = self.context['request']
+        url = reverse('certificate-items-list', kwargs={'certificate_pk': obj.id})
+        return request.build_absolute_uri(url)
 
-class LisInspectionItemSerializer(serializers.ModelSerializer):
+
+class UpdateInspectionCertificateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InspectionCertificate
+        fields = ['remarks', 'delivery_status']
+
+
+class ListInspectionItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InspectionItem
-        fields = '__all__'
+        fields = [
+            'id', 'tendered_quantity',
+            'accepted_quantity', 'rejected_quantity', 'feed_back', 'item',
+        ]
+    
+    item = ItemSerializer()
 
-    item = ItemSerilaizer()
+class InspectionItemSerializer(serializers.ModelSerializer):
+    item = serializers.PrimaryKeyRelatedField(
+        queryset=Item.objects.all(),
+        help_text='Link to an existing item',
+    )
 
-
-class StockEntrySerializer(serializers.ModelSerializer):
     class Meta:
-        model = StockEntry
-        fields = '__all__'
+        model = InspectionItem
+        fields = [
+            'id', 'tendered_quantity',
+            'accepted_quantity', 'rejected_quantity', 'feed_back', 'item',
+        ]
+
+    def validate_item(self, value):
+        certificate = InspectionCertificate.objects.get(pk=self.context['certificate_id'])
+        if not Item.objects.filter(department=certificate.department, pk=value.id).exists():
+            raise serializers.ValidationError('Item does not belong to specifies department')
+        
+        return value
+    
+    def create(self, validated_data):
+        validated_data['inspection_id'] = self.context['certificate_id']
+        return super().create(validated_data)
+    
+class BatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Batch
+        fields = [
+            'id', 'batch_number', 'source_type' ,'inspection_item',
+            'transfer_item', 'item', 'source_store', 'warranty_period_months',
+            'warranty_expiry_date', 'expected_life_years', 'manufacture_date', 
+            'expiry_date', 'batch_specifications', 'remarks', 'is_active', 'created_by',
+            'total_quantity', 'current_quantity'
+        ]
+        read_only_fields = ['total_quantity', 'current_quantity']
+
+class StockRegisterSerializer(serializers.ModelSerializer):
+    indexes = serializers.SerializerMethodField(method_name='get_indexes')
+    class Meta:
+        model = StockRegister
+        fields = [
+            'id', 'register_name', 'register_number', 'register_type',
+            'store', 'is_active', 'indexes'
+        ]
+    
+    def get_indexes(self, obj):
+        item_qs = StockEntry.objects.select_related('item').filter(
+            stock_register=obj
+        ).values('item__code', 'item__name').distinct()
+
+        summary = []
+
+        for item in item_qs:
+            summary.append({
+                'code': item['item__code'],
+                'name': item['item__name']
+            })
+        
+        entry_link = None
+        if self.context['request']:
+            entry_link = self.context['request'].build_absolute_uri(
+                reverse('stockentry-list') + f'?stock_register={obj.id}'
+            )
+
+        return {
+            'indexes': summary,
+            'view_all_entries': entry_link
+        }
+
+
+
+    
+        
+
+class StoreSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Store
+        fields = [
+            'id', 'name', 'code', 'store_type',
+            'department', 'parent_store', 'location', 'incharge_name', 
+            'incharge_contact', 'registers'
+        ]
+    registers = StockRegisterSerializer(many=True, read_only=True)
+    
+
+
+class SimpleBatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Batch
+        fields = ['batch_number', 'source_type', 'item']
+
+class ListStoreInventrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StoreInventory
+        fields = ['id', 'batch', 'quantity_on_hand', 'quantity_allocated', 'quantity_qr_tagged']
+
+    batch = SimpleBatchSerializer()
 
 class StoreInventrySerializer(serializers.ModelSerializer):
     class Meta:
         model = StoreInventory
-        fields = '__all__'
+        fields = ['id', 'batch', 'quantity_on_hand', 'quantity_allocated', 'quantity_qr_tagged']
+    
+    def create(self, validated_data):
+        validated_data['store_id'] = self.context['store_id']
+        return super().create(validated_data)
+    
+class StockEnteySerializer(serializers.ModelSerializer):
+    balance = serializers.IntegerField(help_text='balance after this stockentry')
+    class Meta:
+        model = StockEntry
+        fields = [
+            'id', 'entry_type', 'entry_number', 'item',
+            'item', 'quantity', 'from_store', 'to_store', 'from_inspection',
+            'to_location', 'stock_register', 'transfer_note',
+            'created_by', 'balance'
+        ]
